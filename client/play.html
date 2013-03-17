@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>Svinj Svinj Svinja</title>
+	<style type="text/css">
+          * {
+              margin: 0px;
+              padding:0px;
+          }
+          #canvas {
+              position:relative;
+              left:-1px;
+              top:-1px;
+              background-color: #EEEEEE;
+              cursor: crosshair;              
+          }
+	</style>
+	
+	<!-- code -->
+<body>
+	<script type="text/javascript" src="./maps/building1.json"></script>	
+	<script type="text/javascript">
+	var tileContrast = 0.06;
+    var fogSkip = 4;
+	var sightRange = 400;
+	var fov = 128;
+	
+	var mouseX;
+	var mouseY;
+	
+    // index of map layer
+    var mapLayerIndex = 0;
+    // index of map tileset
+    var mapTilesetIndex = 0;
+    // have the tiles been loaded?
+    var tilesLoaded = false;
+    // bitmap with tiles
+    var tiles;
+    // size of 1 tile
+    var tileSize = 32;
+    // tiles in a row
+    var tilesX;
+    // tiles in a column
+    var tilesY;
+    // path to tiles img
+    var tilePath = './maps/building1.png';
+    
+    // have the characters been loaded
+    var entityImagesLoaded = false;
+    // bitmap with characters
+	
+	var mouseAngle = 0;
+	var myDir = 0;
+
+	var entityTypes = {
+		DESTROYED : 0,
+		BLUEROBOT : 1,
+		REDROBOT : 2,
+		GREENROBOT : 3,
+		ORANGEROBOT : 4,
+		PURPLEROBOT : 5,
+		MISSILE : 6,
+		HEALTH : 7,
+		MISSILEAMMO : 8
+	}
+	
+	var score = {};
+	
+	var entityImagePaths = [ './art/robotanimblue.png',
+							 './art/robotanimred.png',
+							 './art/robotanimgreen.png',
+							 './art/robotanimorange.png',
+							 './art/robotanimpurple.png',
+							 './art/missile.png',
+							 './art/health.png',
+							 './art/missileammo.png'];
+	var entityImages = {};
+	
+	var characterNames = { 1 : '  blue', 2 : '   red', 3 : ' green', 4 : 'orange', 5 : 'purple'};
+    
+    // text log
+    var textFromRightBorder = 300;
+    var textRowHeight = 20;
+    var log = [];
+    var rowsSkippedAtStart = 12;      
+	
+	// message types enumeration
+	var messageType = {
+		SERVERINFO : 9,
+		ISPLAYER : 10,
+		KEYDOWN : 11,
+		KEYUP : 12,
+		TURN : 13,
+		LCLICK : 14,
+		RCLICK : 15,
+		ENTITYDATA : 16,
+		ENTITYDATAWITHSCORE : 17,
+		SERVERFULL : 18
+	}
+    
+    var entities;
+	var pendingUpdateQueue = [];
+	var myId;
+	var myHealth;
+	var myAmmo;
+	var redScreen = 0;
+	
+	function getParameterByName(name)
+	{
+	  name = name.replace(/[\[]/, "\\\[").replace(/[\]]/, "\\\]");
+	  var regexS = "[\\?&]" + name + "=([^&#]*)";
+	  var regex = new RegExp(regexS);
+	  var results = regex.exec(window.location.search);
+	  if(results == null)
+		return "";
+	  else
+		return decodeURIComponent(results[1].replace(/\+/g, " "));
+	}
+	
+    window.WebSocket = window.WebSocket || window.MozWebSocket;
+
+    // open connection
+    var serverAddress = getParameterByName('address');	
+    log.push('connecting to ' + serverAddress + '...');
+    var connection = new WebSocket('ws://' + serverAddress);
+    //var connection = new WebSocket('ws://127.0.0.1:9867');
+	connection.binaryType = "arraybuffer";
+
+    connection.onopen = function () {
+        log.push('connected');
+		var byteArray = new Uint8Array(1);
+		byteArray[0] = messageType.ISPLAYER;
+        connection.send(byteArray.buffer);		
+    };
+    
+   connection.onclose = function () {
+        log.push('connection closed');
+    };    
+
+    connection.onerror = function (error) {
+        log.push('connection error');
+        log.push(error);
+    };
+
+    var text = '';
+    // most important part - incoming messages
+    connection.onmessage = function (event) {
+		if (event.data instanceof ArrayBuffer) {
+            pendingUpdateQueue.push(event.data);
+        }
+    };
+    
+    window.onkeydown = function (e) {
+	
+		if (e.keyCode == 107) {
+			tileContrast = Math.min(tileContrast + 0.01, 0.25);
+		} else if (e.keyCode == 109) {
+			tileContrast = Math.max(tileContrast - 0.01, 0);
+		//} else if (e.keyCode == 80) {
+		//	fogSkip = Math.min(fogSkip + 0.5, 15);
+		//} else if (e.keyCode == 79) {
+		//	fogSkip = Math.max(fogSkip - 0.5, 0.5);
+		//} else if (e.keyCode == 76) {
+		//	sightRange = Math.min(sightRange + 32, 1200);
+		//} else if (e.keyCode == 75) {
+		//	sightRange = Math.max(sightRange - 32, 32);
+		//} else if (e.keyCode == 74) {
+		//	fov = Math.min(fov + 2, 128);
+		//} else if (e.keyCode == 72) {
+		//	fov = Math.max(fov - 2, 20);			
+		} else {		
+			var byteArray = new Uint8Array(2);
+			byteArray[0] = messageType.KEYDOWN;
+			byteArray[1] = e.keyCode;
+			connection.send(byteArray.buffer);
+		}
+    };
+	
+	window.onclick = function (e) {
+		if (!myId || !(myId in entities))
+			return;
+	
+		var entity = entities[myId];
+		if (mouseX > entity.x - 32 && mouseX < entity.x + tileSize + 32 && mouseY > entity.y - 32 && mouseY < entity.y + tileSize + 32)
+			return;
+	
+		var byteArray = new Uint8Array(6);
+		byteArray[0] = messageType.LCLICK;
+		byteArray[1] = mouseX >> 8;
+		byteArray[2] = mouseX & 0xFF;
+		byteArray[3] = mouseY >> 8;
+		byteArray[4] = mouseY & 0xFF;
+		byteArray[5] = mouseAngle;
+        connection.send(byteArray.buffer);		
+	}
+	
+    window.onkeyup = function (e) {
+		var byteArray = new Uint8Array(2);
+		byteArray[0] = messageType.KEYUP;
+		byteArray[1] = e.keyCode;
+        connection.send(byteArray.buffer);
+    };
+
+	function parseMessage(data) {
+        var byteArray = new Uint8Array(data);
+        var type = byteArray[0];
+        if (type == messageType.ENTITYDATA || type == messageType.ENTITYDATAWITHSCORE) {
+			myId = byteArray[1];
+			
+			var health = byteArray[2];
+			if (health < myHealth)
+				redScreen = (myHealth - health) / 100;
+			myHealth = health;
+			
+			myAmmo = byteArray[3];
+			
+            entities = {};
+            var index = 4;
+			var entrySize = 8;
+			if (type == messageType.ENTITYDATAWITHSCORE) {
+				entrySize = 10;			
+				score = {};
+			}
+            for (var entityIndex = 0; entityIndex < (byteArray.length - 4) / entrySize; entityIndex++) {
+                var entity = {};
+                entity.id = byteArray[index++];		
+				entity.type = byteArray[index++];
+				if (type == messageType.ENTITYDATAWITHSCORE) {
+					if (entity.type >= 1 && entity.type <= 5) {
+						score[entity.type] = {};
+						score[entity.type].kills = byteArray[index++];
+						score[entity.type].deaths = byteArray[index++];					
+					} else {
+						index += 2;
+					}
+				}
+                entity.x = byteArray[index++] << 8;
+                entity.x += byteArray[index++];
+                entity.y = byteArray[index++] << 8;
+                entity.y += byteArray[index++];
+                entity.angle = byteArray[index++];
+				entity.animFrame = byteArray[index++];
+				
+				if (entity.type != entityTypes.DESTROYED)
+					entities[entity.id] = entity;
+				else if (entity.id in entities)
+					delete entities[entity.id];
+            }
+        }
+	}	 
+
+
+    window.requestAnimFrame = (function(){
+      return  window.requestAnimationFrame       ||
+              window.webkitRequestAnimationFrame ||
+              window.mozRequestAnimationFrame    ||
+              window.oRequestAnimationFrame      ||
+              window.msRequestAnimationFrame     ||
+              function( callback ){
+                window.setTimeout(callback, 1000 / 30);
+              };
+    })();	
+    
+	//setInterval(mainLoop, 1000 / 60);
+	
+	function vectorAngle(x1, y1, x2, y2) {
+		var diffX = x2 - x1;
+		var diffY = y1 - y2;
+		if (diffX == 0)
+			diffX++;
+		var angleRad = Math.atan(diffY / diffX);
+		var angle = Math.floor(angleRad / 2 / 3.14159 * 256);
+		if (diffX < 0)
+			angle = (angle + 128) % 256;
+		if (angle < 0)
+			angle = (angle + 256) % 256;
+		return angle;
+	}
+	
+    window.onload = function(){
+        loadTiles();
+        loadEntityImages();
+        initCanvas();
+		
+		canvas.oncontextmenu = function () {
+			// TODO
+			return false;
+		}
+		
+		canvas.onmousemove = function (e) {
+			if(e.offsetX) {
+				mouseX = e.offsetX;
+				mouseY = e.offsetY;
+			}
+			else if(e.layerX) {
+				mouseX = e.layerX;
+				mouseY = e.layerY;
+			}
+		}
+		
+        mainLoop();
+    };
+
+    window.onresize = function(evt) {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;	
+    }    
+ 		
+    function loadTiles() {
+        tiles = new Image(); 
+        tiles.onload = function() {
+            tilesX = tiles.width / tileSize;
+            tilesY = tiles.height / tileSize;
+            tilesLoaded = true;
+            log.push('tiles loaded');
+        }
+        tiles.src = tilePath;
+    }
+    
+    function loadEntityImages() {
+		var loaded = 0;
+		for (var index in entityImagePaths) {
+			entityImage = new Image(); 
+			entityImages[index*1 + 1] = entityImage;
+			entityImage.onload = function() {
+				loaded++;
+				if (loaded == entityImagePaths.length) {
+					entityImagesLoaded = true;
+					log.push('animations loaded');					
+				}
+			}
+			entityImage.src = entityImagePaths[index];
+		}
+    }    
+
+    function initCanvas() {
+        canvas = document.getElementById("canvas");
+        context = canvas.getContext('2d');
+        
+        canvas.width = document.width;
+        canvas.height = document.height;
+    }  
+
+    // rendering data
+    var canvas;
+    var context;
+    
+    var oldTime = +new Date;
+    function renderFPS() {
+        time = +new Date;
+        fps = Math.round(1000/(time-oldTime));
+        oldTime = time;		
+        context.fillStyle = '#555';
+        context.font = 'normal 12px consolas bold';					
+        // write fps in the first row
+        context.fillText('fps: ' + fps.toString(), canvas.width - textFromRightBorder, textRowHeight * 1);
+    }
+	
+	function renderScore() {
+		scoreOrder = [];
+		for (var id in score)
+			scoreOrder.push(id);	
+		scoreOrder.sort(function (a, b) {
+							if (score[a].kills == score[b].kills)
+								return score[a].deaths >= score[b].deaths;
+							else
+								return score[a].kills <= score[b].kills; });
+		
+        context.fillStyle = '#555';
+        context.font = 'normal 12px consolas bold';					
+		var row = 3;
+		for (var index in scoreOrder) {
+			var id = scoreOrder[index];
+			var entry = score[id];
+			var name = characterNames[id];
+			context.fillText(name + ': ' + entry.kills + ' - ' + entry.deaths, canvas.width - textFromRightBorder, textRowHeight * row);	
+			row++;
+		}
+	}
+	
+	function renderHealth() {
+		if (myHealth >= 70) 
+			context.fillStyle = '#0f0';
+		else if (myHealth >= 40)
+			context.fillStyle = '#ff0';
+		else
+			context.fillStyle = '#f00';
+			
+        context.font = 'normal 24px consolas bold';					
+		if (myHealth)
+			context.fillText('HEALTH: ' + myHealth, canvas.width - textFromRightBorder, textRowHeight * 8);	
+	}
+	
+	function renderAmmo() {
+		if (myAmmo >= 10) 
+			context.fillStyle = '#0f0';
+		else if (myAmmo >= 5)
+			context.fillStyle = '#ff0';
+		else
+			context.fillStyle = '#f00';
+			
+        context.font = 'normal 24px consolas bold';					
+		if (myHealth)
+			context.fillText('AMMO:   ' + myAmmo, canvas.width - textFromRightBorder, textRowHeight * 10);	
+	}	
+	
+    function renderLog() {
+        context.fillStyle = '#555';		
+        context.font = 'normal 12px consolas bold';					
+        for (var i = 0; i < log.length; i++) {
+            context.fillText(log[i], canvas.width - textFromRightBorder, textRowHeight * (i + rowsSkippedAtStart));		
+        }
+    }
+    
+    function clearCanvas() {
+        context.fillStyle   = '#000';	
+        context.fillRect(0, 0, canvas.width, canvas.height);	
+    }
+	
+	function renderRedScreen() {
+		if (redScreen <= 0)
+			return;
+		
+		context.globalAlpha = redScreen;
+		context.fillStyle   = '#f00';	
+		context.fillRect(0, 0, canvas.width, canvas.height);
+		context.globalAlpha = 1;
+		redScreen -= 0.02;
+	}
+		
+    function renderMap() {
+        // don't draw map until tiles are loaded
+        if (tilesLoaded == false)
+            return;
+			
+		if (!visibleTiles)
+			return;
+            
+        var tileArray = map.layers[mapLayerIndex].data;
+        var currentX = 0;
+        var currentY = 0;
+        for (var i = 0; i < tileArray.length; i++) {
+			context.globalAlpha = 1 - (4 * tileContrast) + visibleTiles[i] * tileContrast;			
+			var tileImageIndex = tileArray[i] - 1;
+			var sourceY = Math.floor(tileImageIndex / tilesX) * tileSize;
+			var sourceX = (tileImageIndex % tilesX) * tileSize;
+			context.drawImage(tiles, sourceX, sourceY, tileSize, tileSize, currentX * tileSize, currentY * tileSize, tileSize, tileSize);
+			currentX++;			
+			if (currentX == map.layers[0].width) {
+				currentX = 0;
+				currentY++;
+			}			
+        }
+		context.globalAlpha = 1;
+    }
+    
+    function renderEntities() {
+        // don't draw entities until tiles are loaded
+        if (tilesLoaded == false)
+            return;
+			
+		// don't draw entities until entity images are loaded
+		if (entityImagesLoaded == false)
+			return;
+			
+		if (!visibleTiles)
+			return;		
+
+		var mapWidth = map.layers[mapLayerIndex].width;
+		var mapHeight = map.layers[mapLayerIndex].height;		
+
+        for (var index in yOrder) {
+            var entity = entities[yOrder[index]];
+			var tile = getTile(entity.x + 16, entity.y + 16);
+			var tileIndex = tile.y * mapWidth + tile.x;
+			if (visibleTiles[tileIndex] > 0)
+				context.globalAlpha = 0.2 + visibleTiles[tileIndex] * 0.2;					
+			else
+				continue;
+				
+			var image = entityImages[entity.type];
+			if (!image) {
+				var a = 1;
+			}
+			
+			var targetX = 0;
+			var targetY = 0;			
+			var sourceX = 0;
+			var animFrames = 4;
+			var animDelay = 16;
+			var singleImageHeight = image.height / animFrames;
+			var sourceY = Math.floor(entity.animFrame / animDelay) * singleImageHeight;			
+			if (image.width > tileSize) {
+				sourceX = Math.round(entity.angle/tileSize)*tileSize;
+				if (sourceX > 7*tileSize)
+					sourceX = (sourceX + 8*tileSize) % 8*tileSize;
+				context.drawImage(image, sourceX, sourceY, image.width / 8, singleImageHeight, entity.x, entity.y + tileSize - singleImageHeight, tileSize, singleImageHeight);			        					
+			} else {
+				context.save();			
+				context.translate(entity.x + image.width / 2, entity.y + singleImageHeight / 2);
+				context.rotate(-entity.angle / 256 * 2 * 3.141592); 		
+				context.drawImage(image, sourceX, sourceY, image.width, singleImageHeight, -image.width / 2, -singleImageHeight / 2, tileSize, singleImageHeight);			   
+				context.restore();		
+			}
+        }
+		
+		context.globalAlpha = 1;	
+    }		
+    
+    function render() {	
+        clearCanvas();
+        renderMap();		
+        renderEntities();
+		renderRedScreen();
+        renderFPS();		
+		renderScore();
+		renderHealth();
+		renderAmmo();
+        renderLog();
+
+    }
+	
+	function getTile(x, y) {
+		var tile = {};
+		tile.x = Math.floor(x >> 5);
+		tile.y = Math.floor(y >> 5);
+		return tile;
+	}	
+	
+	var visibleTiles;
+	function calcFog() {
+		if (!entities)
+			return;
+			
+		var entity = entities[myId];
+				
+		var tileArray = map.layers[mapLayerIndex].data;
+		var tileProperties = map.tilesets[mapTilesetIndex].tileproperties;
+		var mapWidth = map.layers[mapLayerIndex].width;
+		var mapHeight = map.layers[mapLayerIndex].height;
+
+		//var eyeX = entity.x + 16;
+		//var eyeY = entity.y + 8;			
+		var eyeX = entity.x + 4;
+		var eyeY = entity.y + 4;					
+		entityTile = getTile(eyeX, eyeY);			
+		
+		visibleTiles = [];
+		for (var i = 0; i < mapHeight * mapWidth; i++)
+			visibleTiles[i] = 0;
+		
+		for (var y = 0; y <= mapHeight; y++) {
+			for (var x = 0; x <= mapWidth; x++) {
+				var realX = x << 5;
+				var realY = y << 5;
+				
+				
+				var angle = vectorAngle(eyeX, eyeY, realX, realY);
+				var angleDiff = Math.abs(angle - entity.angle);
+				if (angleDiff > 128)
+					angleDiff = 256 - angleDiff;
+				
+				if ((entityTile.x - x == 0 ||  entityTile.x - x == -1) && (entityTile.y - y == 0 ||  entityTile.y - y == -1))
+					angleDiff = 0;
+					
+				var tileMaxDist = Math.max(Math.abs(entityTile.x - x), Math.abs(entityTile.y - y));
+				var tempFov = fov;
+				if (tileMaxDist < 2)
+					tempFov = 64;
+				else if (tileMaxDist < 3)
+					tempFov = 32;
+				else if (tileMaxDist < 4)
+					tempFov = 16;					
+					
+				tempFov = Math.max(fov, tempFov);
+					
+				if (angleDiff > tempFov)
+					continue;				
+				
+				var diffX = realX - eyeX;
+				var diffY = realY - eyeY;
+				var diffTotal = Math.sqrt(diffX * diffX + diffY * diffY);
+				
+				if (diffTotal > sightRange) 
+					continue;
+					
+				var incX = diffX / diffTotal * fogSkip;
+				var incY = diffY / diffTotal * fogSkip;
+				var steps = Math.floor(diffX / incX);
+				if (diffX == 0)
+					steps = Math.floor(diffY / incY);
+					
+				steps = steps - 1;
+					
+				var visible = true;
+				var currentX = eyeX;
+				var currentY = eyeY;
+				
+				if (entityTile.x != x || entityTile.y != y) {
+					for (var i = 0; i < steps; i++) {
+						currentX += incX;
+						currentY += incY;
+						var tileX = Math.floor(currentX >> 5);
+						var tileY = Math.floor(currentY >> 5);
+						var tileIndex = tileY * mapWidth + tileX;
+						var tilePropIndex = tileArray[tileIndex] - 1;
+						if (tilePropIndex in tileProperties && tileProperties[tilePropIndex].canWalk == 0) {
+							visible = false;
+							break;
+						}
+					}
+				}
+				
+				if (visible == true) {
+					if (y > 0 && x > 0)
+						visibleTiles[(y - 1) * mapWidth + x - 1]++;
+					if (y > 0 && x < mapWidth)
+						visibleTiles[(y - 1) * mapWidth + x]++;
+					if (y < mapHeight && x > 0)
+						visibleTiles[y * mapWidth + x - 1]++;
+					if (y < mapHeight && x < mapWidth)
+						visibleTiles[y * mapWidth + x]++;
+				}
+			}
+		}
+	}
+	
+	function updateMouseAngle() {	
+		if (!entities || !mouseX || !mouseY)
+			return;
+				
+		var entity = entities[myId];
+			
+		var eyeX = entity.x + 4;
+		var eyeY = entity.y + 4;
+		
+		var angle = vectorAngle(eyeX, eyeY, mouseX, mouseY);
+		
+		var dir = Math.round(angle/tileSize)*tileSize;
+		if (dir > 7*tileSize)
+			dir = (dir + 8*tileSize) % 8*tileSize;		
+		
+		if (dir != myDir) {
+			var byteArray = new Uint8Array(2);
+			byteArray[0] = messageType.TURN;
+			byteArray[1] = angle;
+			connection.send(byteArray.buffer);			
+			myDir = dir;
+		}
+
+		mouseAngle = angle;
+	}
+	
+	var yOrder;
+	function calcYOrder(collection) {
+		if (!collection)
+			return;
+			
+		yOrder = [];
+		for (var index in collection)
+			yOrder.push(entities[index].id);
+			
+		yOrder.sort(function (a, b) { return entities[a].y >= entities[b].y; });
+	}
+
+    function mainLoop(){
+		// handle updates
+	
+		while (pendingUpdateQueue.length > 0)
+			parseMessage(pendingUpdateQueue.shift());
+		
+		// update angle based on location and mouse position
+		updateMouseAngle();
+		
+		// calculate fog of war
+		calcFog();
+		
+		// calculate y-order
+		calcYOrder(entities);
+		
+		// draw
+        render();
+ 
+        // request new frame
+        requestAnimFrame(function(){
+            mainLoop();
+        });
+    }    
+	</script>
+	<canvas id="canvas"></canvas>	
+</body>
+
+</html>

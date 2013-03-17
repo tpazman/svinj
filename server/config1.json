@@ -1,0 +1,16 @@
+{
+	"serverPort" : 9868,
+	"maxClients" : 12,
+	"maxPlayers" : 3,	
+	"maxEntities" : 64,
+	"updatesPerSecond" : 120,
+	"updatePlayersEachXUpdates" : 3,	
+	"clientTimeout" : 300000,
+	"modeName" : "dm",
+	"modePath" : "./modes/dm/mode.js",
+	"mapName" : "building1",
+	"mapPath" : "./maps/building1.json",
+	"masterUsername" : "svinj1",
+	"masterPassword" : "bla1"
+}
+	

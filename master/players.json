@@ -1,0 +1,16 @@
+{
+	"tpazman" : {
+				"password" : "bla",
+				"name" : "tibor",
+				"globalAdmin" : true,
+				"xp" : 0,
+				"rating" : 1000
+				},
+	"test" 	  : {
+				"password" : "test",
+				"name" : "testni user",
+				"globalAdmin" : false,
+				"xp" : 0,
+				"rating" : 1000
+				}
+}

@@ -1,0 +1,8 @@
+{
+	"serverPort" : 9866,
+	"maxClients" : 256,
+	"updatesPerSecond" : 10,
+	"clientTimeout" : 10000,
+	"loginOrigin" : "http://svinjac.dyndns.org"
+}
+	
