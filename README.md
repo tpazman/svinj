@@ -1,7 +1,7 @@
 svinj
 =====
 
-http://svinj.herokuapp.com [heroku branch]
+http://svinj.herokuapp.com
 
 Simple multiplayer canvas/node/websocket shooter. My "learn javascript" project.
 
