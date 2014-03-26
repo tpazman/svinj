@@ -52,7 +52,7 @@ var playerMaxHealth = 150;
 var playerMaxAmmo = 20;
 var fireCooldown = 500;
 var invariantMissileSpeed = 420;
-var borderSoftness = 2;
+var borderSoftness = 5;
 
 // data
 var config;

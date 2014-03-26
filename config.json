@@ -4,7 +4,7 @@
 	"maxPlayers" : 3,	
 	"maxEntities" : 64,
 	"updatesPerSecond" : 120,
-	"updatePlayersEachXUpdates" : 3,	
+	"updatePlayersEachXUpdates" : 1,	
 	"clientTimeout" : 300000,
 	"modeName" : "dm",
 	"modePath" : "./modes/dm/mode.js",

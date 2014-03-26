@@ -1,29 +1,33 @@
-// http://ejohn.org/blog/ecmascript-5-strict-mode-json-and-more/
-"use strict";
-
-process.title = 'svinjserver';
-
 // dependencies
-var webSocketServer = require('websocket').server;
+var WebSocketServer = require('ws').Server;
 var http = require('http');
+var express = require('express');
 var fs = require('fs');
+var app = express();
 var serverProtocol = require('./serverprotocol.js');
-var config = loadJson(process.argv[2]);
-var mode = require(config.modePath);
+var config = loadJson('config.json');
 var map = loadJson(config.mapPath);
+var mode = require(config.modePath);
+  
+app.use(express.static(__dirname + '/'));
+
+var port = port = process.env.PORT || 9868;
+var server = http.createServer(app);
+server.listen(port);
+
+console.log('http server listening on %d', port);
+
+var wServer = new WebSocketServer({server: server});
+console.log('websocket server created');
 
 // set up initial state
-
 var gameState;
 var clients;
 var freeClientIds;
 var playerClients;
 var entities;
-
 var pendingActions;
 var timerId;
-
-initialize();
 
 function initialize() {
 	gameState = {};
@@ -39,11 +43,7 @@ function initialize() {
 	timerId = -1;
 }
 
-// create http server
-var server = http.createServer(function(request, response) { });
-server.listen(config.serverPort, function() {
-	console.log((new Date()) + " Server is listening on port " + config.serverPort);
-});
+initialize();
 
 var clientState = {
 	CONNECTED : 0,
@@ -52,21 +52,18 @@ var clientState = {
 	PLAYING : 3
 }
 
-// create websocket server
-var wServer = new webSocketServer({ httpServer: server });
-
 matchStart();
 
 // connection request callback
-wServer.on('request', function(request) {
+wServer.on('connection', function(request) {
 
 	if (freeClientIds.length == 0) {
 		request.reject();
 		return;
 	}
 	
-    var connection = request.accept(null, request.origin); 
-	connection.binaryType = "arraybuffer";
+    var connection = request;
+	//connection.binaryType = 'arraybuffer';
 	var client = {};
 	client.connection = connection;
 	client.id = freeClientIds.shift();
@@ -77,11 +74,18 @@ wServer.on('request', function(request) {
     console.log((new Date()) + ' connect: ' + client.id);
 	//gameState.updatedPositions = true;
 	
+	// TEMP
+	// playerClients++;
+	// client.isPlayer = true;
+	// mode.addPlayer(client);	
+	// END TEMP
+	
     // message received callback
     connection.on('message', function(message) {
+		console.log(message);
 		// parse binary messages
-		if (message.type == 'binary' && 'binaryData' in message && message.binaryData instanceof Buffer) {
-			var byteArray = new Uint8Array(message.binaryData);	
+		if (message instanceof Buffer) {
+			var byteArray = new Uint8Array(message);	
 			var parsedAction = serverProtocol.actionFromMessage(byteArray, client);
 			if (parsedAction.valid == true) {
 				if (parsedAction.immediate == true)
@@ -92,10 +96,12 @@ wServer.on('request', function(request) {
 		}
 		// parse json messages
 		else {
-			var request = JSON.parse(message.utf8Data)
-			var response = respond(request);
-			if (response)
-				connection.send(JSON.stringify(response));
+		    if (message && message.utf8Data) {
+				var request = JSON.parse(message.utf8Data)
+				var response = respond(request);
+				if (response)
+					connection.send(JSON.stringify(response));
+			}
 		}
     });
  
@@ -183,15 +189,15 @@ function sendUpdates() {
 		if (client.isPlayer) {
 			var entityDataMessage = serverProtocol.messageFromEntityData(entities, client, gameState.updatedScore);	
 			dataSent += 34 + entityDataMessage.length;
-			client.connection.send(entityDataMessage);
+			client.connection.send(entityDataMessage, {binary: true});
 		}
     }
 	updatesSent++;
 	
 	var time = new Date();
-	if (time - lastKbpsUpdate > 1000) {
+	if (time - lastKbpsUpdate > 60000) {
 		lastKbpsUpdate = time;
-		console.log((dataSent / 1024) + ' kb/s, ' + updatesSent + ' updates per second');
+		console.log((dataSent / 1024 / 60) + ' kb/s, ' + updatesSent / 60 + ' updates per second');
 		dataSent = 0;
 		updatesSent = 0;
 	}
@@ -200,6 +206,8 @@ function sendUpdates() {
 }
 
 function evalAction(action) {
+	console.log(action);
+
 	var client = clients[action.clientId];
 	
 	if (action.type == serverProtocol.messageType.ISPLAYER) {

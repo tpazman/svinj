@@ -19,7 +19,7 @@
 	
 	<!-- code -->
 <body>
-	<script type="text/javascript" src="./maps/building1.json"></script>	
+	<script type="text/javascript" src="/maps/building1.js"></script>	
 	<script type="text/javascript">
 	var tileContrast = 0.06;
     var fogSkip = 4;
@@ -80,7 +80,7 @@
 	var characterNames = { 1 : '  blue', 2 : '   red', 3 : ' green', 4 : 'orange', 5 : 'purple'};
     
     // text log
-    var textFromRightBorder = 300;
+    var textFromRightBorder = 200;
     var textRowHeight = 20;
     var log = [];
     var rowsSkippedAtStart = 12;      
@@ -121,10 +121,9 @@
     window.WebSocket = window.WebSocket || window.MozWebSocket;
 
     // open connection
-    var serverAddress = getParameterByName('address');	
-    log.push('connecting to ' + serverAddress + '...');
-    var connection = new WebSocket('ws://' + serverAddress);
-    //var connection = new WebSocket('ws://127.0.0.1:9867');
+    var serverAddress = location.origin.replace(/^http/, 'wss');
+    log.push('connecting...');
+    var connection = new WebSocket(serverAddress);
 	connection.binaryType = "arraybuffer";
 
     connection.onopen = function () {
@@ -258,7 +257,7 @@
               window.oRequestAnimationFrame      ||
               window.msRequestAnimationFrame     ||
               function( callback ){
-                window.setTimeout(callback, 1000 / 30);
+                window.setTimeout(callback, 1000 / 10);
               };
     })();	
     
@@ -298,6 +297,9 @@
 				mouseY = e.layerY;
 			}
 		}
+		
+		canvas.width = window.innerWidth;
+		canvas.height = window.innerHeight;
 		
         mainLoop();
     };
