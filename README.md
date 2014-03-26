@@ -5,4 +5,4 @@ http://svinj.herokuapp.com
 
 Simple multiplayer canvas/node/websocket shooter. My "learn javascript" project.
 
-This is the branch running @ heroku. It has no master server nor a server list page. A single server + client web site bundled in a heroku app.
+This is the branch running @ heroku. It lacks a master server and a server list page. A single node server + client web site bundled in a heroku app.
