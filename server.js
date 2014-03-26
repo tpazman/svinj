@@ -189,7 +189,12 @@ function sendUpdates() {
 		if (client.isPlayer) {
 			var entityDataMessage = serverProtocol.messageFromEntityData(entities, client, gameState.updatedScore);	
 			dataSent += 34 + entityDataMessage.length;
-			client.connection.send(entityDataMessage, {binary: true});
+			try {
+				client.connection.send(entityDataMessage, {binary: true});
+			}
+			catch (err) {
+				// the connection died, but the close event wasn't raised yet -> fine
+			}
 		}
     }
 	updatesSent++;

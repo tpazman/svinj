@@ -83,7 +83,7 @@
     var textFromRightBorder = 200;
     var textRowHeight = 20;
     var log = [];
-    var rowsSkippedAtStart = 12;      
+    var rowsSkippedAtStart = 13;      
 	
 	// message types enumeration
 	var messageType = {
@@ -391,7 +391,7 @@
 			
         context.font = 'normal 24px consolas bold';					
 		if (myHealth)
-			context.fillText('HEALTH: ' + myHealth, canvas.width - textFromRightBorder, textRowHeight * 8);	
+			context.fillText('HEALTH: ' + myHealth, canvas.width - textFromRightBorder, textRowHeight * 9);	
 	}
 	
 	function renderAmmo() {
@@ -404,7 +404,7 @@
 			
         context.font = 'normal 24px consolas bold';					
 		if (myHealth)
-			context.fillText('AMMO:   ' + myAmmo, canvas.width - textFromRightBorder, textRowHeight * 10);	
+			context.fillText('AMMO:   ' + myAmmo, canvas.width - textFromRightBorder, textRowHeight * 11);	
 	}	
 	
     function renderLog() {

@@ -1,7 +1,7 @@
 {
 	"serverPort" : 9868,
 	"maxClients" : 12,
-	"maxPlayers" : 3,	
+	"maxPlayers" : 5,	
 	"maxEntities" : 64,
 	"updatesPerSecond" : 120,
 	"updatePlayersEachXUpdates" : 1,	
